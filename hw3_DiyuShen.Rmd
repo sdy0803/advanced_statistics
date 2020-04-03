@@ -1,0 +1,144 @@
+---
+title: "Hw3"
+author: "Diyu Shen"
+date: "2020/2/9"
+output: html_document
+---
+```{r}
+
+library(rethinking)
+library(gridExtra)
+library(tidyverse)
+```
+
+#easy
+
+##e1
+the first line is the likelihood
+
+##e2
+2 paramaters
+
+##e3
+the second line is the linear model
+
+##e4
+3 parameters
+
+#hard
+
+```{r}
+data(mtcars)
+(mtcars)
+```
+##h1
+```{r}
+data <- data.frame(x = mtcars$wt, y = mtcars$mpg)
+```
+
+```{r}
+model<-quap(alist(
+  y ~ dnorm(mu, sigma),
+  mu <- alpha + beta*x,
+  alpha ~ dnorm(0,10),
+  beta ~ dnorm(0,10),
+  sigma ~ dunif(0,10)
+),data = data)
+
+summary(model)
+
+
+```
+
+```{r}
+draws <- extract.samples(model,n=1e3
+                )
+plot_data<-summarise(draws, alpha = mean(alpha), beta = mean(beta), sigma = mean(sigma)
+)
+plot_data
+```
+```{r}
+ggplot(data,
+       aes(x = x, y = y))+geom_point()+
+  geom_abline(data = draws[1:100,],
+            aes(intercept = alpha, slope = beta))
+       
+```
+
+
+```{r}
+weights<-seq(1, 6, length.out = 100)
+sim_weight<-data.frame(x = weights)
+mu<-link(model, data = sim_weight, n=10000)
+dim(mu)
+mu.mean<-apply(mu, 2, mean)
+mu.PI<-apply(mu, 2, PI, prob = 0.89)
+```
+```{r}
+plot( mpg ~ wt , data=mtcars , col=col.alpha(rangi2,0.7) )
+# plot the MAP line, aka the mean mu for each weight
+lines( x=weights , y=mu.mean )
+# plot a shaded region for 89% PI
+shade( mu.PI , weights )
+```
+
+
+
+
+##h2
+```{r}
+mpg_preds<-sim(model, data = sim_weight,n=1e4)
+mpg.PI<-apply(mpg_preds, 2, PI, prob = 0.89)
+```
+```{r}
+plot( y ~ x , data , col=col.alpha(rangi2,0.7) )
+lines( weights , mu.mean )
+# draw PI region for simulated heights
+shade( mpg.PI , weights )
+```
+```{r}
+hist(mpg_preds)
+
+```
+
+
+##h3
+```{r}
+model_3<-quap(alist(
+  y ~ dnorm(mu, sigma),
+  mu <- alpha + beta*x,
+  alpha ~ dnorm(35,15),
+  beta ~ dnorm(-5,15),
+  sigma ~ dunif(0,15)
+  ),
+data = data)
+
+summary(model_3)
+
+```
+
+```{r}
+weights<-seq(1, 6, length.out = 100)
+sim_weight_3<-data.frame(x = weights)
+mu<-link(model_3, data = sim_weight_3, n=1000)
+dim(mu)
+mu.mean<-apply(mu, 2, mean)
+mu.PI<-apply(mu, 2, PI, prob = 0.89)
+```
+```{r}
+plot( mpg ~ wt , data=mtcars , col=col.alpha(rangi2,0.7) )
+# plot the MAP line, aka the mean mu for each weight
+lines( x=weights , y=mu.mean )
+# plot a shaded region for 89% PI
+shade( mu.PI , weights )
+```
+
+##h4
+
+```{r}
+mpg_preds_4<-sim(model_3, data = sim_weight,n=1e4)
+```
+```{r}
+hist(mpg_preds_4)
+```
+as we change the sigma for the priors, the peak spreads or shrinks.

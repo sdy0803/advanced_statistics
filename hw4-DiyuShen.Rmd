@@ -1,0 +1,90 @@
+---
+title: "Hw4"
+author: "Diyu Shen"
+date: "2020/2/15"
+output: html_document
+---
+```{r}
+library(rethinking)
+library(tidyverse)
+```
+```{r}
+data(mtcars)
+head(mtcars)
+```
+
+1: A car’s fuel efficiency is probably affected by more than just its weight. The energy output of the engine also likely plays a role. Propose a multiple linear regression model for fuel efficiency (mpg) that includes both weight (wt) and horsepower (hp). Describe the model using the typical format we’ve used in class (likelihood, linear function, priors)
+
+
+
+mpg ~ Normal(mu, sigma)
+
+mu = alpha + beta0 * wt + beta1 * hp
+
+alpha ~ Normal(10, 10)
+
+beta0 ~ Normal(0, 1)
+
+beta1 ~ Normal(0, 1)
+
+sigma ~ Unif(0, 10)
+
+
+
+
+
+
+
+
+2: Inspect your priors using prior predictive simulation. Are the priors reasonable? Revise if needed.
+
+```{r}
+alpha_s <- rnorm(1e4, 10,10)
+beta0_s <- rnorm(1e4,0,1)
+beta1_s <- rnorm(1e4,0,1)
+sigma_s <- runif(1e4,0,10)
+wt <- seq(0,10,1e4)
+hp <- seq(0,500,1e4)
+mu_s <- alpha_s + beta0_s * wt + beta1_s * hp
+
+mpg_p <- rnorm(1e4, mu_s, sigma_s)
+hist(mpg_p)
+```
+
+
+3: Compute the posterior using quap(). Briefly summarize your findings,
+```{r}
+data_e <- data.frame(x = mtcars$wt, y = mtcars$mpg, z = mtcars$hp)
+model<-quap(alist(
+  y ~ dnorm(mu, sigma),
+  mu <- alpha + beta0*x+beta1*z,
+  alpha ~ dnorm(0,10),
+  beta0 ~ dnorm(0,10),
+  beta1 ~ dnorm(0,10),
+  sigma ~ dunif(0,10)
+  
+),data = data_e)
+
+summary(model)
+```
+
+
+```{r}
+data_e <- data.frame(x = mtcars$wt, y = mtcars$mpg, z = mtcars$hp)
+model<-quap(alist(
+  y ~ dnorm(mu, sigma),
+  mu <- alpha + beta0*x+beta1*z,
+  alpha ~ dnorm(35,5),
+  beta0 ~ dnorm(-5,10),
+  beta1 ~ dnorm(0,10),
+  sigma ~ dunif(0,10)
+  
+),data = data_e)
+
+summary(model)
+```
+
+4: Compare results to those you estimated for HW3, a model that did not include horsepower. What differences do you notice?
+
+We observe that the absolute value of beta0 is smaller than the beta in HW3.  However, the absolute value of mtcars is so close to 0 that without hypothetical test, it seems reasonable to doubt if the model has indeed anything to do with horsepower.
+

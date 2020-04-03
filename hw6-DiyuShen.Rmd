@@ -1,0 +1,116 @@
+---
+title: "Hw6"
+author: "Diyu Shen"
+date: "2020/3/18"
+output: html_document
+---
+```{r}
+library(rethinking)
+library(tidyverse)
+```
+
+```{r}
+data(nettle)
+head(nettle)
+```
+```{r}
+summary(nettle)
+```
+
+
+#1
+```{r}
+new.data=data.frame(num.lang=nettle$num.lang,k.pop=nettle$k.pop,mean.growing.season=nettle$mean.growing.season,
+                    area = nettle$area, sd.growing.season = nettle$sd.growing.season) %>%
+  mutate(lang.per.cap = num.lang / k.pop, lang.div = log(lang.per.cap), area.log = log(area))
+
+```
+
+lang.per.cap ~ mean.growing.season positively?
+```{r}
+model_1<-quap(
+  alist( lang.div ~ dnorm(mu, sigma),
+         mu<-a1 + b1 * mean.growing.season+b2*area.log,
+         a1 ~ dnorm(0, 5), 
+         b1 ~ dnorm(0, 5), 
+         b2 ~ dnorm(0, 5), 
+         sigma ~ dexp(1)), 
+  data = new.data
+)
+
+
+summary(model_1)
+```
+```{r}
+summary(new.data)
+```
+
+```{r}
+mean.growing.season.plot<-seq(0, 15, length.out = 1000)
+sim_mean.growing.season<-data.frame(mean.growing.season = mean.growing.season.plot,area.log = 12.935)
+mu.1<-link(model_1, data = sim_mean.growing.season, n=10000)
+dim(mu.1)
+mu.mean<-apply(mu.1, 2, mean)
+```
+```{r}
+
+plot( lang.div ~  mean.growing.season, data=new.data , col=col.alpha(rangi2,0.7) )
+lines( x= mean.growing.season.plot , y = mu.mean )
+```
+
+
+as we observe b1 being a positive number, we decide lang.div is positively related to mean.growing.season.
+
+
+#2
+
+Now evaluate the hypothesis that language diversity is negatively associated with the standard deviation of length of growing season, sd.growing.season. This hypothesis follows from uncertainty in harvest favoring social insurance through larger social networks and therefore fewer languages. Again, consider log(area) as a covariate (not an interaction). Interpret your results.
+
+```{r}
+model_2<-quap(
+  alist( lang.div ~ dnorm(mu, sigma),
+         mu<-a1 + b1 * sd.growing.season+b2*area.log,
+         a1 ~ dnorm(0, 5), 
+         b1 ~ dnorm(0, 5), 
+         b2 ~ dnorm(0, 5), 
+         sigma ~ dexp(1)), 
+  data = new.data
+)
+
+summary(model_2)
+```
+
+```{r}
+sd.growing.season.plot<-seq(0, 6, length.out = 1000)
+sim_sd.growing.season<-data.frame(sd.growing.season = sd.growing.season.plot,area.log = 12.935)
+mu.2<-link(model_2, data = sim_sd.growing.season, n=10000)
+dim(mu.2)
+mu.mean<-apply(mu.2, 2, mean)
+```
+```{r}
+
+plot( lang.div ~  sd.growing.season, data=new.data , col=col.alpha(rangi2,0.7) )
+lines( x= sd.growing.season.plot , y = mu.mean )
+```
+
+as we observe the result, the value vary from negative number to positive, so we determine the relationship is not significant.
+
+#3
+
+Finally, evaluate the hypothesis that mean.growing.season and sd.growing.season interact to synergistically reduce language diversity. The idea is that, in nations with longer average growing seasons, high variance makes storage and redistribution even more important than it would be otherwise. That way, people can cooperate to preserve and protect windfalls to be used during the droughts. These forces in turn may lead to greater social integration and fewer languages.
+
+```{r}
+model_3<-quap(
+  alist( lang.div ~ dnorm(mu, sigma),
+         mu<-a1 + b1 * sd.growing.season * mean.growing.season,
+         a1 ~ dnorm(0, 5), 
+         b1 ~ dnorm(0, 5), 
+          
+         sigma ~ dexp(1)), 
+  data = new.data
+)
+
+summary(model_3)
+```
+
+it looks reasonable to assume there is some kind of negatively related relationship between these variables.

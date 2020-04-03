@@ -1,0 +1,437 @@
+---
+title: "Hw7-DiyuShen"
+author: "Diyu Shen"
+date: "2020/4/2"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(rethinking)
+```
+```{r}
+setwd('/Users/shendiyu/advanced statistics/intermediate_stats/hw/data')
+data = read_csv("./titanic.csv")
+head(data)
+```
+
+
+```{r}
+data<-data %>% 
+  mutate(S = ifelse(Sex=='male',1,0)) %>% 
+  select(Survived,Pclass,S,Age,Fare,"Siblings/Spouses Aboard","Parents/Children Aboard") %>% 
+  rename(sex=S,num_siblings="Siblings/Spouses Aboard",num_parents="Parents/Children Aboard",age=Age,survive=Survived)
+```
+```{r}
+head(data)
+```
+```{r}
+summary(data)
+```
+notice here we have some free-riders. let's see how many they got.
+```{r}
+filter(data,Fare==0)
+
+```
+only 1 of 15 survived, and he was riding in 3rd cabin and young.
+
+##dag
+```{r}
+dag<-dagitty("dag{
+age-> Fare -> Pclass ->survive
+sex->survive<-age
+num_siblings->survive
+num_parent->survive
+num_siblings <- num_parent}
+
+             "
+)
+```
+```{r}
+impliedConditionalIndependencies(dag)
+```
+
+
+#Part A: EDA
+##1 Pclass
+let's first work on the distribution of Pclass.
+```{r}
+data %>% 
+  group_by(Pclass) %>% 
+  summarise(n=n())
+```
+
+
+We can assume higher Pclass results in higher odds in survival and it's reasonable to assume higher fare indicates better Pclass.
+```{r}
+ggplot(data) +
+  geom_histogram(aes(x=Pclass,fill=survive==1),,position = 'dodge')
+  
+```
+##2 age
+
+Here let's see how value of age distributes
+```{r}
+summary(data$age)
+ggplot(data) +
+  geom_histogram(aes(x=age))
+```
+```{r}
+ggplot(data) +
+  geom_jitter(aes(x=age,y=survive))
+```
+```{r}
+ggplot(data)+
+  geom_point(aes(x=age,y=Fare))
+```
+It does not seem to have a proper connection between age and fare. what if we log on it?
+```{r}
+data %>% 
+  filter(Fare>0) %>% 
+  ggplot(.)+
+    geom_point(aes(x=age,y=log(Fare),colour=Pclass)) 
+
+```
+
+
+we may need to find if age has something to with rate of survival, to do that we need to calculate ROS for each group of age
+```{r}
+ggplot(data) +
+  geom_histogram(aes(x=age,fill = survive==1),position = 'identity',alpha=0.7)
+```
+so it's true young people got a lower chance to survive.
+but is it because they cannot afford a better cabin?
+```{r}
+ggplot(data)+
+  geom_histogram(aes(x=age,fill=survive==1),position = 'identity',alpha=0.7)+
+  facet_grid( ~ Pclass)
+```
+so you see in the best cabin, it appears a lot of young people survived and it appears in three different cabins old people have a better chance to survive in better cabins.
+
+but what about among those who survived, male or female which group have a higher chance?
+
+
+
+##3 sex
+and we need to study what happens when sex is included in the distribution
+```{r}
+ggplot(data)+
+  geom_histogram(aes(x=age,fill = sex==1),position = 'identity',alpha=0.7)
+```
+So in each age group, there are more males than females. Let's see what if we put survive into account
+```{r}
+data_s<-data %>% 
+  filter(survive==1)
+ggplot(data_s)+
+  geom_histogram(aes(x=age,fill = sex==1),position = 'identity',alpha=0.7)
+```
+So it appears female have more chance in surviving.
+
+so combining these two graphs, women indeed have a higher possibility to survive. at least from the fact that female above a certain age will have better odds to survive.
+
+so sex, age, and pclass will definitely impact ROS in different ways.
+
+##4 num_siblings
+let's see the distribution of num_siblings
+```{r}
+ggplot(data) +
+  geom_histogram(aes(x=num_siblings))
+```
+
+let's see if num_siblings have some effect
+```{r}
+ggplot(data) +
+  geom_point(aes(x=age,y=num_siblings,colour=survive==1))
+```
+let's see if they tend to be rich people or poor people.
+```{r}
+ggplot(filter(data,num_siblings>0))+
+  geom_histogram(aes(x=num_siblings,fill=survive==1),position = 'dodge',alpha=0.7)+
+  facet_grid( ~ Pclass)
+```
+so people with siblings in better cabins can survive better. it's probably because of the cabin status itself. we may need to calculate their ROS individually to see if num_sibling really matters.
+```{r}
+data %>% 
+  group_by(num_siblings) %>% 
+  summarise(total=n(),num_survive=sum(survive),ROS=num_survive/total)
+```
+it seems there's some connection. We shall fit a spline on it.
+or we can relabel the num_siblings into binom value:w/ siblings(1), w/o siblings(0)
+```{r}
+
+data_s<-data %>% 
+  mutate(siblings = ifelse(data$num_siblings>0,1,0))
+head(data_s)
+
+```
+
+```{r}
+data_s %>% 
+  group_by(siblings) %>% 
+  summarise(total=n(),num_survive=sum(survive),ROS=num_survive/total)
+```
+looks like there's some connection.
+
+
+##5 num_parents
+let's see the distribution of num_parents
+```{r}
+ggplot(data) +
+  geom_histogram(aes(x=num_parents))
+```
+
+let's see if num_parents have some effect
+```{r}
+ggplot(data) +
+  geom_point(aes(x=age,y=num_parents,colour=survive==1))
+```
+similar to num_siblings, we can study cabin difference.
+
+```{r}
+ggplot(filter(data,num_parents>0))+
+  geom_histogram(aes(x=num_parents,fill=survive==1),position = 'dodge',alpha=0.7)+
+  facet_grid( ~ Pclass)
+```
+
+```{r}
+data %>% 
+  group_by(num_parents) %>% 
+  summarise(total=n(),num_survive=sum(survive),ROS=num_survive/total)
+```
+since the samples are biased in num, what if we reclassify num_parents into binom forms: w/ parents(1), w/o parents(0)?
+
+```{r}
+data_p<-data %>% 
+  mutate(parents = ifelse(data$num_parents>0,1,0))
+head(data_p)
+```
+and we do the group_by again,but this time we group by our new label
+```{r}
+data_p %>% 
+  group_by(parents) %>% 
+  summarise(total=n(),num_survive=sum(survive),ROS=num_survive/total)
+```
+we can assume with parents, they have a higher possibility to survive.
+###note
+what if we combine parents and siblings? In fact, they are essentially the same, co-passengers.
+```{r}
+data.note<-data %>% 
+  mutate(parents = ifelse(data$num_parents>0,1,0),siblings = ifelse(data$num_siblings>0,1,0),parsib=parents+siblings)
+data.note %>% 
+  group_by(parsib) %>% 
+  summarise(total=n(),num_survive=sum(survive),ROS=num_survive/total)
+```
+
+
+
+##6 fare
+we should also address if Pclass is of enough information about fares
+```{r}
+ggplot(data) + 
+  geom_point(aes(x=Fare,y=Pclass))
+```
+it seems it's not well seperated,what if we log the fare?
+```{r}
+ggplot(data) + 
+  geom_point(aes(x=log(Fare),y=Pclass))
+```
+it seems better.
+```{r}
+data %>% 
+  filter(Fare>0) %>% 
+  ggplot(.)+
+    geom_histogram(aes(x=log(Fare)))+
+    facet_grid( ~ Pclass)
+
+```
+let's do regression and see what we got.
+```{r}
+data.m<-data %>% 
+  filter(Fare>0)
+data.m1 <- data.frame(x = log(data.m$Fare), y = data.m$Pclass)
+model<-quap(alist(
+  y ~ dnorm(mu, sigma),
+  mu <- alpha + beta*x,
+  alpha ~ dnorm(0,5),
+  beta ~ dnorm(0,10),
+  sigma ~ dunif(0,10)
+  
+),data = data.m1)
+
+summary(model)
+```
+and plot it
+```{r}
+ggplot(data.m)+
+  geom_point(aes(x=log(Fare),y = Pclass))+
+  geom_abline(slope=-0.67,intercept = 4.29,colour='blue')
+```
+
+forget about it. let's see if fare alone can do as much good as pclass.
+```{r}
+data %>% 
+  filter(Fare>0) %>% 
+  ggplot(.) +
+    geom_histogram(aes(x=log(Fare),fill=survive==1),position = 'identity',alpha=0.7)
+```
+
+
+
+#Part B: modeling
+let's see our new dataset
+```{r}
+data_B <-data%>%
+  mutate(parents = ifelse(data$num_parents>0,1,0),siblings = ifelse(data$num_siblings>0,1,0)) %>% 
+  select(survive,age,sex,Pclass,parents,siblings)
+```
+```{r}
+data_B
+```
+## train/test split
+we need to train-test split our data
+
+if we reclassify age into three groups and make categorical variables.
+
+```{r}
+data_B2 <- data_B %>%
+  mutate(age1=ifelse(age<15,1,0),age2=ifelse(age>15&age<=40,1,0),age3=ifelse(age>40,1,0))
+data_B2
+```
+```{r}
+data_B3 <- data_B2 %>% 
+  mutate(parsib=parents+siblings, par1=ifelse(parsib==0,1,0),par2=ifelse(parsib==1,1,0),par3=ifelse(parsib==2,1,0))
+```
+```{r}
+## 75% of the sample size
+smp_size <- floor(0.75 * nrow(data_B))
+
+## set the seed to make your partition reproducible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(data_B3)), size = smp_size)
+
+train <- data_B3[train_ind, ]
+test <- data_B3[-train_ind, ]
+```
+## model1
+```{r}
+model<-ulam(alist(
+  survive ~ dbinom(1, p),
+  logit(p) <- a+b1*sex+c1*age+b2*Pclass+b3*parents+b4*siblings,
+  a~dnorm(0,1),
+  c1~dnorm(0,1),
+ 
+  b1~dnorm(0,1),
+  b2~dnorm(0,1),
+  b3~dnorm(0,1),
+  b4~dnorm(0,1)
+),data = train,cores = 4, chains = 2, iter = 3000,
+control = list(adapt_delta = 0.99 ,max_treedepth=15),log_lik = TRUE)
+```
+```{r}
+precis(model)
+```
+```{r}
+traceplot(model)
+```
+## model2
+
+
+
+```{r}
+model_2<-ulam(alist(
+  survive ~ dbinom(1, p),
+  logit(p) <- a+b1*sex+c1*age1+c2*age2+c3*age3+b2*Pclass+b3*parents+b4*siblings,
+  a~dnorm(0,1),
+  c1~dnorm(0,1),
+  c2~dnorm(0,1),
+  c3~dnorm(0,1),
+  b1~dnorm(0,1),
+  b2~dnorm(0,1),
+  b3~dnorm(0,1),
+  b4~dnorm(0,1)
+),data = train,cores = 4, chains = 2, iter = 2000,
+control = list(adapt_delta = 0.975 ,max_treedepth=15),log_lik = TRUE)
+```
+```{r}
+traceplot(model_2)
+```
+
+```{r}
+precis(model_2)
+```
+
+```{r}
+compare(model,model_2)
+```
+
+
+## model3
+
+
+```{r}
+
+model_3<-ulam(alist(
+  survive ~ dbinom(1, p),
+  logit(p) <- a+b1*sex+c1*age1+c2*age2+c3*age3+b2*Pclass+d1*par1+d2*par2+d3*par3,
+  a~dnorm(0,1),
+  c3~dnorm(0,1),
+  c1~dnorm(0,1),
+  c2~dnorm(0,1),
+  b1~dnorm(0,1),
+  b2~dnorm(0,1),
+  d1~dnorm(0,1),
+  d2~dnorm(0,1),
+  d3~dnorm(0,1)
+  ),data = train,cores = 4, chains = 2, iter = 3000,
+  control = list(adapt_delta = 0.99 ,max_treedepth=15),log_lik = TRUE)
+```
+```{r}
+precis(model_3)
+```
+
+```{r}
+traceplot(model_3)
+```
+```{r}
+compare(model,model_2,model_3)
+```
+## evaluate model
+draw some samples from the dataset
+
+```{r}
+n=nrow(test)
+sim_x<-seq(from=1,to = n,length.out = n)
+
+preds1<-sim(model, test)
+preds2<-sim(model_2, test)
+preds3<-sim(model_3, test)
+preds1_mn = apply(preds1, 2, mean)
+preds2_mn = apply(preds2, 2, mean)
+preds3_mn = apply(preds3, 2, mean)
+```
+
+```{r}
+ggplot(mn_frame)+
+  
+  geom_point(aes(x=sim_x,y=preds1),colour='red')+
+  geom_point(aes(x=sim_x,y=preds2),colour='blue')+
+  geom_point(aes(x=sim_x,y=preds3),colour='yellow')+
+  geom_point(aes(x=sim_x,y=test$survive),colour='black')+
+  geom_abline(intercept = 0.5,slope=0,alpha=0.5)
+```
+
+```{r}
+mn_frame<-data.frame(preds1=preds1_mn,preds2=preds2_mn,preds3=preds3_mn,y=test$survive) %>% 
+  mutate(preds1=ifelse(preds1<0.5,0,1),preds2=ifelse(preds2<0.5,0,1),preds3=ifelse(preds3<0.5,0,1)) %>% 
+  mutate(a1=ifelse(preds1==y,1,0),a2=ifelse(preds2==y,1,0),a3=ifelse(preds3==y,1,0))
+
+table(mn_frame$a1)
+table(mn_frame$a2)
+table(mn_frame$a3)
+```
+
+
+
+
+it seems model_2 fits best.
+
+

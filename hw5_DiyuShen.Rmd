@@ -1,0 +1,174 @@
+---
+title: "Hw5"
+author: "Diyu Shen"
+date: "2020/2/23"
+output: html_document
+---
+
+```{r}
+library(rethinking)
+library(tidyverse)
+```
+```{r}
+data(foxes)
+head(foxes)
+```
+###sometimes code may not run. You could give it more tries. it will work.
+1. Fit two bivariate Gaussian regressions, using quap: (1) body weight as a linear function of territory size (area), and (2) body weight as a linear function of groupsize. Plot the results of these regressions, displaying the MAP regression line and the 89% interval of the mean. Is either variable important for predicting fox body weight?
+
+given the conditions, we draw that territory size --> body weight <-- groupsize. and based on that, we build 2 linear models.
+```{r}
+new.data=data.frame(bw=foxes$weight,gs=foxes$groupsize,ts=foxes$area)
+```
+we extract data from foxes and rename the labels for simplification and build the models based on the new dataset.
+```{r}
+model_1<-quap(
+  alist( bw ~ dnorm(mu_1, sigma_1),
+         mu_1<-a1 + b1 * ts,
+         a1 ~ dnorm(0, 5), 
+         b1 ~ dnorm(0, 5), 
+         sigma_1 ~ dexp(1)), 
+  data = new.data
+)
+
+
+summary(model_1)
+
+```
+```{r}
+model_2<-quap(
+  alist( bw ~ dnorm(mu_2, sigma_2),
+         mu_2<-a2 + b2 * gs,
+         a2 ~ dnorm(0, 5), 
+         b2 ~ dnorm(0, 5), 
+         sigma_2 ~ dexp(1)), 
+  data = new.data
+)
+summary(model_2)
+```
+
+here we plot two plots for the models respectively.
+```{r}
+ts.plot<-seq(1, 6, length.out = 1000)
+sim_ts<-data.frame(ts = ts.plot)
+mu_1<-link(model_1, data = sim_ts, n=10000)
+dim(mu_1)
+mu_1.mean<-apply(mu_1, 2, mean)
+```
+
+```{r}
+
+plot( bw ~  ts, data=new.data , col=col.alpha(rangi2,0.7) )
+lines( x= ts.plot , y = mu_1.mean )
+```
+```{r}
+gs.plot<-seq(1, 8, length.out = 1000)
+sim_gs<-data.frame(gs = gs.plot)
+mu_2<-link(model_2, data = sim_gs, n=10000)
+dim(mu_2)
+mu_2.mean<-apply(mu_2, 2, mean)
+```
+```{r}
+plot( bw ~ gs , data=new.data , col=col.alpha(rangi2,0.7) )
+lines( x= gs.plot , y = mu_2.mean )
+```
+from result of regression, we see the coefficient in model where area is included is not significantly different from 0. Thus, we decide area is not important to predict body weight.
+
+
+
+2. Now fit a multiple linear regression with weight as the outcome and both area and groupsize as predictor variables. Plot the predictions of the model for each predictor, holding the other predictor constant at its mean. What does this model say about the importance of each variable? Why do you get different results than you got in the exercise just above?
+```{r}
+summary(new.data)
+```
+
+```{r}
+model_3<-quap(
+  alist( bw ~ dnorm(mu, sigma),
+         mu<-a1 + b1 * ts+b2 * gs,
+         a1 ~ dnorm(0, 5), 
+         b1 ~ dnorm(0, 5),
+         b2 ~ dnorm(0, 5),
+         sigma ~ dexp(1)), 
+  data = new.data
+)
+summary(model_3)
+```
+```{r}
+ts.plot<-seq(1, 6, length.out = 1000)
+sim_ts<-data.frame(ts = ts.plot, gs = 4.345)
+mu_31<-link(model_3, data = sim_ts, n=10000)
+dim(mu_31)
+mu_31.mean<-apply(mu_31, 2, mean)
+```
+
+```{r}
+
+plot( bw ~  ts, data=new.data , col=col.alpha(rangi2,0.7) )
+lines( x= ts.plot , y = mu_31.mean )
+lines( x= ts.plot , y = mu_1.mean,col='blue' )
+```
+```{r}
+gs.plot<-seq(1, 8, length.out = 1000)
+sim_gs<-data.frame(gs = gs.plot,ts = 3.169)
+mu_32<-link(model_3, data = sim_gs, n=10000)
+dim(mu_32)
+mu_32.mean<-apply(mu_32, 2, mean)
+```
+```{r}
+plot( bw ~ gs , data=new.data , col=col.alpha(rangi2,0.7) )
+lines( x= gs.plot , y = mu_32.mean )
+lines( x= gs.plot , y = mu_2.mean,col='blue')
+```
+We can see that in both graphs, the black lines are of larger slope. that is because the model behind the line includes two predicators while the blue ones only have one. Although we are holding one of the predicators as a constant, what we do is not equivalent of getting rid of the other predicator completely. So it is going to be different from the simple regression model where only one predicator is involved. On the other way, in terms of the single-predicator model, the predicator is the only variable that accounts for the body weight and other variables are not considered.
+
+
+3. Finally, consider the avgfood variable. Fit two more multiple regressions: (1) body weight as an additive function of avgfood and groupsize, and (2) body weight as an additive function of all three variables, avgfood and groupsize and area. Compare the results of these models to the previous models you’ve fit, in the first two exercises. (a) Is avgfood or area a better predictor of body weight? If you had to choose one or the other to include in a model, which would it be? Support your assessment with any tables or plots you choose. (b) When both avgfood or area are in the same model, their effects are reduced (closer to zero) and their standard errors are larger than when they are included in separate models. Can you explain this result?
+```{r}
+new.data.1=data.frame(bw=foxes$weight,gs=foxes$groupsize,ts=foxes$area,af=foxes$avgfood)
+summary(new.data.1)
+```
+
+```{r}
+model.1<-quap(
+  alist( bw ~ dnorm(mu, sigma),
+         mu<-a1 + b1 * af+b2 * gs,
+         a1 ~ dnorm(0, 5), 
+         b1 ~ dnorm(0, 5),
+         b2 ~ dnorm(0, 5),
+         sigma ~ dexp(1)), 
+  data = new.data.1
+)
+summary(model.1)
+```
+now holding gs mean as constant, plot af against bw.
+```{r}
+af.plot<-seq(0, 1.3, length.out = 1000)
+sim_af<-data.frame(af = af.plot, gs = 4.345)
+mu.1<-link(model.1, data = sim_af, n=10000)
+dim(mu.1)
+mu.1.mean<-apply(mu.1, 2, mean)
+```
+
+```{r}
+
+plot( bw ~  af, data=new.data.1 , col=col.alpha(rangi2,0.7) )
+lines( x= af.plot , y = mu.1.mean )
+```
+I would choose avgfood rather than area as it indicates a clearer linear relationship.
+
+
+```{r}
+model.2<-quap(
+  alist( bw ~ dnorm(mu, sigma),
+         mu<-a1 + b1 * af+b2 * gs+b3*ts,
+         a1 ~ dnorm(0, 5), 
+         b1 ~ dnorm(0, 5),
+         b2 ~ dnorm(0, 5),
+         b3 ~ dnorm(0, 5),
+         sigma ~ dexp(1)), 
+  data = new.data.1
+)
+summary(model.2)
+```
+area and food average could be somehow linked. It might indicate a possible connection explained by logic that larger area may produce more food. Thus these two variables contains similar information which can lead to reduced effects and larger errors when included at the same time in a model.
+
